@@ -31,7 +31,6 @@ import org.hamcrest.MatcherAssert;
 import org.jose4j.jwk.JsonWebKeySet;
 import org.jose4j.jwk.RsaJsonWebKey;
 import org.junit.jupiter.api.Test;
-import org.owasp.webgoat.lessons.jwt.JWTSecretKeyEndpoint;
 
 public class JWTLessonIntegrationTest extends IntegrationTest {
 
@@ -71,7 +70,7 @@ public class JWTLessonIntegrationTest extends IntegrationTest {
   }
 
   private String getSecretToken(String token) {
-    for (String key : JWTSecretKeyEndpoint.SECRETS) {
+    for (String key : new String[] {"victory", "business", "available", "shipping", "washington"}) { // старий словник лишаємо лише в тесті
       try {
         Jwts.parser().setSigningKey(TextCodec.BASE64.encode(key)).parse(token);
       } catch (JwtException e) {

@@ -16,7 +16,6 @@ import java.time.Instant;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
-import java.util.Random;
 import org.owasp.webgoat.container.assignments.AssignmentEndpoint;
 import org.owasp.webgoat.container.assignments.AssignmentHints;
 import org.owasp.webgoat.container.assignments.AttackResult;
@@ -31,11 +30,15 @@ import org.springframework.web.bind.annotation.RestController;
 @AssignmentHints({"jwt-secret-hint1", "jwt-secret-hint2", "jwt-secret-hint3"})
 public class JWTSecretKeyEndpoint implements AssignmentEndpoint {
 
-  public static final String[] SECRETS = {
-    "victory", "business", "available", "shipping", "washington"
-  };
+  // випадковий 256-бітний ключ замість слова зі словника (CWE-326/330)
+  private static final byte[] JWT_SECRET_BYTES = new byte[32];
+
+  static {
+    new java.security.SecureRandom().nextBytes(JWT_SECRET_BYTES);
+  }
+
   public static final String JWT_SECRET =
-      TextCodec.BASE64.encode(SECRETS[new Random().nextInt(SECRETS.length)]);
+      TextCodec.BASE64.encode(new String(JWT_SECRET_BYTES, java.nio.charset.StandardCharsets.ISO_8859_1));
   private static final String WEBGOAT_USER = "WebGoat";
   private static final List<String> expectedClaims =
       List.of("iss", "iat", "exp", "aud", "sub", "username", "Email", "Role");

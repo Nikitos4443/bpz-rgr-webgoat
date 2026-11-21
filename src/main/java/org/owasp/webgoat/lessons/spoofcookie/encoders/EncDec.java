@@ -5,60 +5,59 @@
 package org.owasp.webgoat.lessons.spoofcookie.encoders;
 
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.Base64;
-import org.apache.commons.lang3.RandomStringUtils;
-import org.springframework.security.crypto.codec.Hex;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
+/**
+ * Cookie підписується HMAC-SHA256 серверним ключем замість оборотного
+ * кодування reverse+hex+base64 (CWE-327/565). Формат: base64url(value).base64url(HMAC).
+ */
 public class EncDec {
 
-  // PoC: weak encoding method
+  private static final byte[] KEY = new byte[32];
+  private static final Base64.Encoder ENC = Base64.getUrlEncoder().withoutPadding();
+  private static final Base64.Decoder DEC = Base64.getUrlDecoder();
 
-  private static final String SALT = RandomStringUtils.randomAlphabetic(10);
+  static {
+    new SecureRandom().nextBytes(KEY);
+  }
 
   private EncDec() {}
+
+  private static byte[] hmac(byte[] data) {
+    try {
+      Mac mac = Mac.getInstance("HmacSHA256");
+      mac.init(new SecretKeySpec(KEY, "HmacSHA256"));
+      return mac.doFinal(data);
+    } catch (Exception e) {
+      throw new IllegalStateException("HMAC error", e);
+    }
+  }
 
   public static String encode(final String value) {
     if (value == null) {
       return null;
     }
-
-    String encoded = value.toLowerCase() + SALT;
-    encoded = revert(encoded);
-    encoded = hexEncode(encoded);
-    return base64Encode(encoded);
+    byte[] v = value.getBytes(StandardCharsets.UTF_8);
+    return ENC.encodeToString(v) + "." + ENC.encodeToString(hmac(v));
   }
 
   public static String decode(final String encodedValue) throws IllegalArgumentException {
     if (encodedValue == null) {
       return null;
     }
-
-    String decoded = base64Decode(encodedValue);
-    decoded = hexDecode(decoded);
-    decoded = revert(decoded);
-    return decoded.substring(0, decoded.length() - SALT.length());
-  }
-
-  private static String revert(final String value) {
-    return new StringBuilder(value).reverse().toString();
-  }
-
-  private static String hexEncode(final String value) {
-    char[] encoded = Hex.encode(value.getBytes(StandardCharsets.UTF_8));
-    return new String(encoded);
-  }
-
-  private static String hexDecode(final String value) {
-    byte[] decoded = Hex.decode(value);
-    return new String(decoded);
-  }
-
-  private static String base64Encode(final String value) {
-    return Base64.getEncoder().encodeToString(value.getBytes());
-  }
-
-  private static String base64Decode(final String value) {
-    byte[] decoded = Base64.getDecoder().decode(value.getBytes());
-    return new String(decoded);
+    int dot = encodedValue.indexOf('.');
+    if (dot < 0) {
+      throw new IllegalArgumentException("Malformed cookie");
+    }
+    byte[] v = DEC.decode(encodedValue.substring(0, dot));
+    byte[] tag = DEC.decode(encodedValue.substring(dot + 1));
+    byte[] expected = hmac(v);
+    if (!java.security.MessageDigest.isEqual(expected, tag)) {
+      throw new IllegalArgumentException("Invalid cookie signature");
+    }
+    return new String(v, StandardCharsets.UTF_8);
   }
 }

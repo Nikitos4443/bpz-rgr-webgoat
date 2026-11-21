@@ -27,6 +27,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class HashingAssignment implements AssignmentEndpoint {
   public static final String[] SECRETS = {"secret", "admin", "password", "123456", "passw0rd"};
 
+  // bcrypt із сіллю замість MD5/SHA-256 без солі (CWE-328/759/916)
+  private static final org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder ENCODER =
+      new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(12);
+
   @RequestMapping(path = "/crypto/hashing/md5", produces = MediaType.TEXT_HTML_VALUE)
   @ResponseBody
   public String getMd5(HttpServletRequest request) throws NoSuchAlgorithmException {
@@ -36,10 +40,7 @@ public class HashingAssignment implements AssignmentEndpoint {
 
       String secret = SECRETS[new Random().nextInt(SECRETS.length)];
 
-      MessageDigest md = MessageDigest.getInstance("MD5");
-      md.update(secret.getBytes());
-      byte[] digest = md.digest();
-      md5Hash = DatatypeConverter.printHexBinary(digest).toUpperCase();
+      md5Hash = ENCODER.encode(secret);
       request.getSession().setAttribute("md5Hash", md5Hash);
       request.getSession().setAttribute("md5Secret", secret);
     }
@@ -53,7 +54,7 @@ public class HashingAssignment implements AssignmentEndpoint {
     String sha256 = (String) request.getSession().getAttribute("sha256");
     if (sha256 == null) {
       String secret = SECRETS[new Random().nextInt(SECRETS.length)];
-      sha256 = getHash(secret, "SHA-256");
+      sha256 = ENCODER.encode(secret);
       request.getSession().setAttribute("sha256Hash", sha256);
       request.getSession().setAttribute("sha256Secret", secret);
     }

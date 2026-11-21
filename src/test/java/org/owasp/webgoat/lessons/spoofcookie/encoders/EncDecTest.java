@@ -5,59 +5,49 @@
 package org.owasp.webgoat.lessons.spoofcookie.encoders;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
+/** Тести cookie з підписом HMAC: розкодування, відхилення підробки й зміни. */
 class EncDecTest {
 
-  @ParameterizedTest
-  @DisplayName("Encode test")
-  @MethodSource("providedForEncValues")
-  void testEncode(String decoded, String encoded) {
-    String result = EncDec.encode(decoded);
-
-    assertThat(result.endsWith(encoded)).isTrue();
-  }
-
-  @ParameterizedTest
-  @DisplayName("Decode test")
-  @MethodSource("providedForDecValues")
-  void testDecode(String decoded, String encoded) {
-    String result = EncDec.decode(encoded);
-
-    assertThat(decoded, is(result));
+  @Test
+  @DisplayName("Пара encode/decode повертає вихідне значення")
+  void roundTrip() {
+    for (String v : new String[] {"webgoat", "admin", "tom"}) {
+      assertThat(EncDec.decode(EncDec.encode(v))).isEqualTo(v);
+    }
   }
 
   @Test
-  @DisplayName("null encode test")
-  void testNullEncode() {
+  @DisplayName("Регресія CWE-565: підроблений cookie з валідним payload відхиляється")
+  void forgedCookieRejected() {
+    java.util.Base64.Encoder enc = java.util.Base64.getUrlEncoder().withoutPadding();
+    String forged =
+        enc.encodeToString("tom".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            + "."
+            + enc.encodeToString("not-a-valid-hmac".getBytes());
+    assertThatThrownBy(() -> EncDec.decode(forged))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("Модифікація payload недійсна (цілісність під HMAC)")
+  void tamperedPayloadRejected() {
+    String valid = EncDec.encode("webgoat");
+    String tag = valid.substring(valid.indexOf('.'));
+    java.util.Base64.Encoder enc = java.util.Base64.getUrlEncoder().withoutPadding();
+    String tampered = enc.encodeToString("admin".getBytes()) + tag;
+    assertThatThrownBy(() -> EncDec.decode(tampered))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("null encode/decode")
+  void nulls() {
     assertThat(EncDec.encode(null)).isNull();
-  }
-
-  @Test
-  @DisplayName("null decode test")
-  void testNullDecode() {
     assertThat(EncDec.decode(null)).isNull();
-  }
-
-  private static Stream<Arguments> providedForEncValues() {
-    return Stream.of(
-        Arguments.of("webgoat", "YxNmY2NzYyNjU3Nw=="),
-        Arguments.of("admin", "2ZTY5NmQ2NDYx"),
-        Arguments.of("tom", "2ZDZmNzQ="));
-  }
-
-  private static Stream<Arguments> providedForDecValues() {
-    return Stream.of(
-        Arguments.of("webgoat", "NjI2MTcwNGI3YTQxNGE1OTU2NzQ3NDYxNmY2NzYyNjU3Nw=="),
-        Arguments.of("admin", "NjI2MTcwNGI3YTQxNGE1OTU2NzQ2ZTY5NmQ2NDYx"),
-        Arguments.of("tom", "NjI2MTcwNGI3YTQxNGE1OTU2NzQ2ZDZmNzQ="));
   }
 }
